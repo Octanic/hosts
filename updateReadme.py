@@ -4,69 +4,100 @@
 # https://github.com/StevenBlack
 #
 # This Python script will update the readme files in this repo.
-#
-# pylint: disable=invalid-name
-# pylint: disable=bad-whitespace
 
-import os
-import platform
-import string
-import sys
-import time
 import json
+import os
+import time
 from string import Template
 
 # Project Settings
-BASEDIR_PATH         = os.path.dirname(os.path.realpath(__file__))
-README_TEMPLATE      = os.path.join(BASEDIR_PATH, 'readme_template.md')
-README_FILENAME      = 'readme.md'
+BASEDIR_PATH = os.path.dirname(os.path.realpath(__file__))
+README_TEMPLATE = os.path.join(BASEDIR_PATH, "readme_template.md")
+README_FILENAME = "readme.md"
 README_DATA_FILENAME = "readmeData.json"
 
-# Detecting Python 3 for version-dependent implementations
-Python3 = sys.version_info >= (3,0)
 
 def main():
+    s = Template(
+        "${description} | [Readme](https://github.com/StevenBlack/"
+        "hosts/blob/master/${location}readme.md) | "
+        "[link](https://raw.githubusercontent.com/StevenBlack/"
+        "hosts/master/${location}hosts) | "
+        "${fmtentries} | "
+        "[link](http://sbc.io/hosts/${location}hosts)"
+    )
+    with open(README_DATA_FILENAME, "r", encoding="utf-8", newline="\n") as f:
+        data = json.load(f)
 
-    s = Template('${description} | [Readme](https://github.com/StevenBlack/hosts/blob/master/${location}readme.md) | [link](https://raw.githubusercontent.com/StevenBlack/hosts/master/${location}hosts) | [link](https://raw.githubusercontent.com/StevenBlack/hosts/master/${location}hosts.zip) | ${fmtentries}')
+    keys = list(data.keys())
 
-    with open(README_DATA_FILENAME, 'r') as f:
-       data = json.load(f)
+    # Sort by the number of en-dashes in the key
+    # and then by the key string itself.
+    keys.sort(key=lambda item: (item.count("-"), item))
 
-    if Python3:
-        keys = list(data.keys())
-    else:
-        keys = data.keys()
-
-    keys.sort(key=cmp_keys)
-
-    tocRows = ""
+    toc_rows = ""
     for key in keys:
         data[key]["fmtentries"] = "{:,}".format(data[key]["entries"])
         if key == "base":
-            data[key]["description"] = 'Unified hosts = **(adware + malware)**'
+            data[key]["description"] = "Unified hosts = **(adware + malware)**"
         else:
-            data[key]["description"] = 'Unified hosts **+ ' + key.replace( "-", " + ") + '**'
+            data[key]["description"] = (
+                "Unified hosts **+ " + key.replace("-", " + ") + "**"
+            )
 
-        tocRows += s.substitute(data[key]) + "\n"
+        if "\\" in data[key]["location"]:
+            data[key]["location"] = data[key]["location"].replace("\\", "/")
 
+        toc_rows += s.substitute(data[key]) + "\n"
+
+    row_defaults = {
+        "name": "",
+        "description": "",
+        "homeurl": "",
+        "frequency": "",
+        "url": "",
+        "license": "",
+        "issues": "",
+    }
+
+    t = Template(
+        "${name} | ${description} |[link](${homeurl})"
+        " | [raw](${url}) | ${frequency} | ${license} | [issues](${issues})"
+    )
 
     for key in keys:
-        extensions = key.replace( "-", ", ")
-        extensionsStr = "* Extensions: **" + extensions + "**."
-        extensionsHeader = "with "+ extensions + " extensions"
+        extensions = key.replace("-", ", ")
+        extensions_str = "* Extensions: **" + extensions + "**."
+        extensions_header = "with " + extensions + " extensions"
 
-        with open(os.path.join(data[key]["location"],README_FILENAME), "wt") as out:
-            for line in open(README_TEMPLATE):
-                line = line.replace( '@GEN_DATE@', time.strftime("%B %d %Y", time.gmtime()))
-                line = line.replace( '@EXTENSIONS@', extensionsStr )
-                line = line.replace( '@EXTENSIONS_HEADER@', extensionsHeader )
-                line = line.replace( '@NUM_ENTRIES@', "{:,}".format(data[key]["entries"]))
-                line = line.replace( '@SUBFOLDER@',os.path.join(data[key]["location"], ''))
-                line = line.replace( '@TOCROWS@', tocRows )
-                out.write( line )
+        source_rows = ""
+        source_list = data[key]["sourcesdata"]
 
-def cmp_keys(item):
-    return item.count('-'), item
+        for source in source_list:
+            this_row = {}
+            this_row.update(row_defaults)
+            this_row.update(source)
+            source_rows += t.substitute(this_row) + "\n"
+
+        with open(
+            os.path.join(data[key]["location"], README_FILENAME), "wt", encoding="utf-8", newline="\n"
+        ) as out:
+            for line in open(README_TEMPLATE, encoding="utf-8", newline="\n"):
+                line = line.replace(
+                    "@GEN_DATE@", time.strftime("%B %d %Y", time.gmtime())
+                )
+                line = line.replace("@EXTENSIONS@", extensions_str)
+                line = line.replace("@EXTENSIONS_HEADER@", extensions_header)
+                line = line.replace(
+                    "@NUM_ENTRIES@", "{:,}".format(data[key]["entries"])
+                )
+                line = line.replace(
+                    "@SUBFOLDER@", os.path.join(data[key]["location"], "")
+                )
+                line = line.replace("@TOCROWS@", toc_rows)
+                line = line.replace("@SOURCEROWS@", source_rows)
+                out.write(line)
+
 
 if __name__ == "__main__":
     main()
